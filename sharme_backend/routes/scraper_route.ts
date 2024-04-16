@@ -16,17 +16,18 @@ router.get('/get-data', async (req: Request, res: Response) => {
         await page.goto(pageUrl, { waitUntil: 'networkidle0' });
 
         // Selector for the button that reveals the phone number
-        const buttonSelector = 'i[rest="user-phone"]';  // This targets the <i> element that you described
+        const buttonSelector = 'i[rest="user-phone"]';
         await page.waitForSelector(buttonSelector);
         await page.click(buttonSelector);
 
         // Selector for the element containing the phone number
-        const phoneSelector = 'div.--flex-1.--pl-4.--pr-4'; // This targets the <div> where the phone number appears
+        const phoneSelector = 'div.--flex-1.--pl-4.--pr-4';
         await page.waitForSelector(phoneSelector, { visible: true });
 
-        const phoneNumber = await page.evaluate((selector) => {
-            const element = document.querySelector(selector) as HTMLElement; // Cast to HTMLElement
-            return element ? element.innerText.trim() : '';
+        // Using a workaround to bypass TypeScript errors
+        const phoneNumber = await page.evaluate((selector: string) => {
+            const element = document.querySelector(selector);
+            return element ? (element as HTMLElement).innerText.trim() : '';
         }, phoneSelector);
 
         await browser.close();
