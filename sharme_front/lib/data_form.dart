@@ -1,6 +1,12 @@
+import 'package:contacts_service/contacts_service.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class DataFormPage extends StatefulWidget {
@@ -15,34 +21,88 @@ class DataFormPageState extends State<DataFormPage> {
   String _selectedValue = 'Charles de Gaulle';
   String? _link;
   String? _phoneNumber;
-  final String _customMessage = 'Ceci est le message envoyé par défaut.';
   final TextEditingController _phoneNumberController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
+  final TextEditingController _contactNameController = TextEditingController();
   bool _isLoading = false;
   final List<String> _options = [
     'Charles de Gaulle',
     'Orly',
-    'Beauvais',
-    'Option 4'
+    'Paris',
   ];
-  MessageMethod _selectedMethod = MessageMethod.whatsapp; // Default to WhatsApp
+  MessageMethod _selectedMethod = MessageMethod.sms; // Default to SMS
+  List<Map<String, String>> _history = [];
 
   @override
   void initState() {
     super.initState();
-    _messageController.text = _customMessage;
+    _updateMessage();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? historyJson = prefs.getString('history');
+    if (historyJson != null) {
+      List<dynamic> jsonDecoded = json.decode(historyJson);
+      List<Map<String, String>> tempHistory = [];
+      for (var entry in jsonDecoded) {
+        DateTime dateTime;
+        try {
+          dateTime = DateTime.parse(entry["timestamp"]);
+        } catch (e) {
+          try {
+            dateTime =
+                DateFormat("dd/MM/yyyy 'à' HH:mm").parse(entry["timestamp"]);
+          } catch (e) {
+            print("Error parsing date for entry: ${entry["timestamp"]}");
+            continue;
+          }
+        }
+        tempHistory.add({
+          "name": entry["name"] as String,
+          "number": entry["number"] as String,
+          "message": entry["message"] as String,
+          "method": entry["method"] as String,
+          "timestamp": DateFormat('dd/MM/yyyy à HH:mm').format(dateTime)
+        });
+      }
+      setState(() {
+        _history = tempHistory.reversed.toList();
+      });
+    }
+  }
+
+  void _addToHistory(
+      String name, String number, String message, String method) async {
+    final prefs = await SharedPreferences.getInstance();
+    _history.add({
+      "name": name.isEmpty ? 'Sans nom' : name,
+      "number": number,
+      "message": message,
+      "method": method,
+      "timestamp": DateTime.now().toIso8601String()
+    });
+    await prefs.setString('history', json.encode(_history));
   }
 
   @override
   void dispose() {
     _phoneNumberController.dispose();
     _messageController.dispose();
+    _contactNameController.dispose();
     super.dispose();
   }
 
   Future<void> _fetchPhoneNumber() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
+
+      if (!_link!.startsWith("https://elifelimo.com/driver/?t=")) {
+        _showErrorDialog(
+            'Le seul site pris en charge pour le moment est "https://elifelimo.com/"');
+        return;
+      }
       setState(() {
         _isLoading = true;
       });
@@ -68,9 +128,59 @@ class DataFormPageState extends State<DataFormPage> {
     }
   }
 
+  Future<void> _addToContacts() async {
+    var permissionStatus = await Permission.contacts.status;
+    if (!permissionStatus.isGranted) {
+      await Permission.contacts.request();
+      permissionStatus = await Permission.contacts.status;
+    }
+
+    if (permissionStatus.isGranted) {
+      final phoneNumber = _phoneNumberController.text.trim();
+      final contactName = _contactNameController.text.trim();
+
+      if (phoneNumber.isNotEmpty && contactName.isNotEmpty) {
+        final contact = Contact(
+          givenName: contactName,
+          phones: [Item(label: "mobile", value: phoneNumber)],
+        );
+        await ContactsService.addContact(contact);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$contactName a été ajouté à vos contacts')),
+          );
+        }
+      } else {
+        if (phoneNumber.isEmpty) {
+          _showErrorDialog("Numéro de téléphone non disponible.");
+        }
+        if (contactName.isEmpty) {
+          _showErrorDialog("Entrez un nom pour le nouveau contact");
+        }
+      }
+    } else {
+      _showErrorDialog(
+          "L'application n'a pas été autorisée à accéder aux contacts");
+    }
+  }
+
+  void _updateMessage() {
+    String airport = _selectedValue;
+    _messageController.text = "See you soon in Paris! 😁\n\n"
+        "Good day! I'll be your chauffeur tomorrow, transporting you from your hotel to $airport Airport.\n\n"
+        "Could you kindly inform me if you'll be traveling with checked baggage or just carry-on items?\n\n"
+        "Tomorrow, upon your arrival, please keep me informed of each step: landing, clearing customs, and waiting for your luggage.\n\n"
+        "Should you have any inquiries, don't hesitate to ask.\n\n"
+        "Looking forward to seeing you in Paris! 😁";
+  }
+
   void _sendMessage() async {
     final phoneNumber = _phoneNumberController.text.trim();
-    final message = Uri.encodeComponent(_messageController.text);
+    final message =
+        _messageController.text; // Use the message from the controller
+    final method = _selectedMethod.toString() == "MessageMethod.whatsapp"
+        ? "whatsapp"
+        : "sms";
 
     if (phoneNumber.isEmpty) {
       _showErrorDialog("Numéro de téléphone non disponible.");
@@ -79,25 +189,59 @@ class DataFormPageState extends State<DataFormPage> {
 
     Uri url;
     if (_selectedMethod == MessageMethod.whatsapp) {
-      url = Uri.parse("https://wa.me/$phoneNumber?text=$message");
+      url = Uri.parse(
+          "https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message)}");
     } else {
-      // Handle SMS
       url = Uri(
           scheme: 'sms', path: phoneNumber, queryParameters: {'body': message});
     }
 
     if (await canLaunchUrl(url)) {
+      _addToHistory(_contactNameController.text, _phoneNumberController.text,
+          message, method);
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } else {
       _showErrorDialog("Impossible de lancer l'application correspondante.");
     }
   }
 
+  void _showHistoryDialog(Map<String, String> entry) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Détail des informations'),
+        content: SingleChildScrollView(
+          child: ListBody(
+            children: <Widget>[
+              Text('Nom: ${entry["name"]}'),
+              const SizedBox(height: 10),
+              Text('Numéro: ${entry["number"]}'),
+              const SizedBox(height: 10),
+              Text('Message: ${entry["message"]}'),
+              const SizedBox(height: 10),
+              Text('Envoyé par ${entry["method"]}'),
+              const SizedBox(height: 10),
+              Text('Date: ${entry["timestamp"]}'),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Erreur'),
+        title: const Text('Une erreur est survenue'),
         content: Text(message),
         actions: <Widget>[
           TextButton(
@@ -118,7 +262,22 @@ class DataFormPageState extends State<DataFormPage> {
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: <Widget>[
+                    Text("Récupération des informations",
+                        style: Theme.of(context).textTheme.headlineLarge),
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.4,
+                      width: MediaQuery.of(context).size.width * 0.8,
+                      child: const CircularProgressIndicator(
+                        strokeWidth: 8,
+                      ),
+                    ),
+                  ],
+                ),
+              )
             : SingleChildScrollView(
                 child: Form(
                   key: _formKey,
@@ -126,16 +285,27 @@ class DataFormPageState extends State<DataFormPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       if (_phoneNumber == null) ...[
-                        Text('Choisir une destination',
-                            style: Theme.of(context).textTheme.headlineLarge),
-                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on_outlined),
+                            const SizedBox(width: 10),
+                            Text('Lieu de départ',
+                                style:
+                                    Theme.of(context).textTheme.headlineSmall),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
                         DropdownButtonFormField<String>(
                           value: _selectedValue,
                           decoration: InputDecoration(
                               border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8.0))),
-                          onChanged: (value) =>
-                              setState(() => _selectedValue = value!),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedValue = value!;
+                              _updateMessage(); // Update the message based on the new selection
+                            });
+                          },
                           validator: (value) =>
                               value == null ? 'Champ obligatoire' : null,
                           items: _options
@@ -148,44 +318,78 @@ class DataFormPageState extends State<DataFormPage> {
                         const SizedBox(height: 20),
                         TextFormField(
                           decoration: const InputDecoration(
-                              labelText: 'URL', border: OutlineInputBorder()),
+                              labelText: 'Entrez le lien',
+                              border: OutlineInputBorder()),
                           validator: (value) => value?.isEmpty ?? true
                               ? 'Veuillez entrer un lien'
                               : null,
                           onSaved: (value) => _link = value,
                         ),
-                        const SizedBox(height: 30),
+                        const SizedBox(height: 20),
                         Center(
                           child: ElevatedButton(
                             onPressed: _fetchPhoneNumber,
                             child: const Text('Obtenir le numéro de téléphone'),
                           ),
                         ),
+                        const SizedBox(height: 50),
+                        if (_history.isNotEmpty) ...[
+                          Row(
+                            children: [
+                              const Icon(Icons.history_outlined),
+                              const SizedBox(width: 10),
+                              Text('Historique',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+                        for (var entry in _history) ...[
+                          InkWell(
+                            onTap: () => _showHistoryDialog(entry),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(entry["name"]!,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge),
+                                  Text(entry["number"]!,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge),
+                                  Text(entry["timestamp"]!,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ] else ...[
-                        ListTile(
-                          title: const Text('WhatsApp'),
-                          leading: Radio(
-                            value: MessageMethod.whatsapp,
-                            groupValue: _selectedMethod,
-                            onChanged: (MessageMethod? value) {
-                              setState(() {
-                                _selectedMethod = value!;
-                              });
-                            },
-                          ),
+                        Row(
+                          children: [
+                            const Icon(Icons.person_outlined),
+                            const SizedBox(width: 10),
+                            Text('Infos de contact',
+                                style:
+                                    Theme.of(context).textTheme.headlineSmall),
+                          ],
                         ),
-                        ListTile(
-                          title: const Text('SMS'),
-                          leading: Radio(
-                            value: MessageMethod.sms,
-                            groupValue: _selectedMethod,
-                            onChanged: (MessageMethod? value) {
-                              setState(() {
-                                _selectedMethod = value!;
-                              });
-                            },
-                          ),
+                        const SizedBox(height: 20),
+                        TextFormField(
+                          controller: _contactNameController,
+                          decoration: const InputDecoration(
+                              labelText: 'Nom du contact',
+                              border: OutlineInputBorder()),
                         ),
+                        const SizedBox(height: 20),
                         TextFormField(
                           controller: _phoneNumberController,
                           decoration: const InputDecoration(
@@ -193,8 +397,55 @@ class DataFormPageState extends State<DataFormPage> {
                               border: OutlineInputBorder()),
                         ),
                         const SizedBox(height: 20),
+                        Center(
+                          child: ElevatedButton(
+                            onPressed: _addToContacts,
+                            child: const Text('Ajouter à mes contacts'),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            const Icon(Icons.message_outlined),
+                            const SizedBox(width: 10),
+                            Text('Message',
+                                style:
+                                    Theme.of(context).textTheme.headlineSmall),
+                          ],
+                        ),
+                        Column(
+                          children: [
+                            Row(
+                              children: [
+                                Radio(
+                                  value: MessageMethod.sms,
+                                  groupValue: _selectedMethod,
+                                  onChanged: (MessageMethod? value) {
+                                    setState(() {
+                                      _selectedMethod = value!;
+                                    });
+                                  },
+                                ),
+                                const Text('SMS'),
+                              ],
+                            ),
+                            Row(children: [
+                              Radio(
+                                value: MessageMethod.whatsapp,
+                                groupValue: _selectedMethod,
+                                onChanged: (MessageMethod? value) {
+                                  setState(() {
+                                    _selectedMethod = value!;
+                                  });
+                                },
+                              ),
+                              const Text('WhatsApp'),
+                            ])
+                          ],
+                        ),
+                        const SizedBox(height: 20),
                         TextFormField(
-                          maxLines: 4,
+                          maxLines: 6,
                           controller: _messageController,
                           decoration: const InputDecoration(
                               labelText: 'Message personnalisé (optionnel)',
