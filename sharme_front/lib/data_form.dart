@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -15,6 +16,7 @@ class DataFormPage extends StatefulWidget {
 }
 
 class DataFormPageState extends State<DataFormPage> {
+  static final String baseUrl = dotenv.env['API_URL'] ?? 'http://10.0.2.2:3000';
   final _formKey = GlobalKey<FormState>();
   String _selectedValue = 'Charles de Gaulle';
   String? _link;
@@ -105,8 +107,8 @@ class DataFormPageState extends State<DataFormPage> {
         _isLoading = true;
       });
       try {
-        var response = await http
-            .get(Uri.parse('http://10.0.2.2:3000/api/get-data?pageUrl=$_link'));
+        var response =
+            await http.get(Uri.parse('$baseUrl/api/get-data?pageUrl=$_link'));
         if (response.statusCode == 200) {
           var data = jsonDecode(response.body);
           setState(() {
@@ -265,6 +267,7 @@ class DataFormPageState extends State<DataFormPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: <Widget>[
                     Text("Récupération des informations",
+                        textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.headlineLarge),
                     SizedBox(
                       height: MediaQuery.of(context).size.height * 0.4,
