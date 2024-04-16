@@ -14,7 +14,7 @@ declare global {
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3003;
 const APP_URL = process.env.APP_URL || '';
 
 app.use(cors());
