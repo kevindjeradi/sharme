@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import express, { Request, Response } from 'express';
 import puppeteer from 'puppeteer';
 
@@ -29,9 +30,9 @@ router.get('/get-data', async (req: Request, res: Response) => {
 
         // Using a workaround to bypass TypeScript errors
         const phoneNumber = await page.evaluate((selector: string) => {
-            const element = document.querySelector(selector);
-            return element ? (element as HTMLElement).innerText.trim() : '';
-        }, phoneSelector);
+            const element = document.querySelector(selector) as HTMLElement | null;
+            return element ? element.innerText.trim() : '';
+        }, phoneSelector);        
 
         await browser.close();
 
