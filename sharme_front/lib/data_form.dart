@@ -40,6 +40,15 @@ class DataFormPageState extends State<DataFormPage> {
     _loadHistory();
   }
 
+  void _resetForm() {
+    setState(() {
+      _phoneNumber = null;
+      _phoneNumberController.clear();
+      _contactNameController.clear();
+      _updateMessage();
+    });
+  }
+
   Future<void> _loadHistory() async {
     final prefs = await SharedPreferences.getInstance();
     final String? historyJson = prefs.getString('history');
@@ -192,8 +201,13 @@ class DataFormPageState extends State<DataFormPage> {
       url = Uri.parse(
           "https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message)}");
     } else {
+      // Encode spaces as %20 for SMS URLs
+      String encodedMessage =
+          Uri.encodeComponent(message).replaceAll('+', '%20');
       url = Uri(
-          scheme: 'sms', path: phoneNumber, queryParameters: {'body': message});
+          scheme: 'sms',
+          path: phoneNumber,
+          queryParameters: {'body': encodedMessage});
     }
 
     if (await canLaunchUrl(url)) {
@@ -258,7 +272,15 @@ class DataFormPageState extends State<DataFormPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Sharme')),
+      appBar: AppBar(
+        title: const Text('Sharme'),
+        leading: _phoneNumber == null
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back_ios),
+                onPressed: _resetForm,
+              ),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: _isLoading
@@ -296,25 +318,43 @@ class DataFormPageState extends State<DataFormPage> {
                           ],
                         ),
                         const SizedBox(height: 20),
-                        DropdownButtonFormField<String>(
-                          value: _selectedValue,
-                          decoration: InputDecoration(
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8.0))),
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedValue = value!;
-                              _updateMessage(); // Update the message based on the new selection
-                            });
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics:
+                              const NeverScrollableScrollPhysics(), // to disable scrolling within the grid
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount:
+                                3, // Adjust number of columns as needed
+                            crossAxisSpacing:
+                                10, // Horizontal space between cards
+                            mainAxisSpacing: 10, // Vertical space between cards
+                          ),
+                          itemCount: _options.length,
+                          itemBuilder: (context, index) {
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedValue = _options[index];
+                                  _updateMessage(); // Update the message when a card is selected
+                                });
+                              },
+                              child: Card(
+                                color: _selectedValue == _options[index]
+                                    ? Colors.blue
+                                    : Colors.white,
+                                child: Center(
+                                  child: Text(_options[index],
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: _selectedValue == _options[index]
+                                            ? Colors.white
+                                            : Colors.black,
+                                      )),
+                                ),
+                              ),
+                            );
                           },
-                          validator: (value) =>
-                              value == null ? 'Champ obligatoire' : null,
-                          items: _options
-                              .map((value) => DropdownMenuItem<String>(
-                                    value: value,
-                                    child: Text(value),
-                                  ))
-                              .toList(),
                         ),
                         const SizedBox(height: 20),
                         TextFormField(
