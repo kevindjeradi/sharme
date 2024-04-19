@@ -175,12 +175,21 @@ class DataFormPageState extends State<DataFormPage> {
 
   void _updateMessage() {
     String airport = _selectedValue;
-    _messageController.text = "See you soon in Paris! 😁\n\n"
-        "Good day! I'll be your chauffeur tomorrow, transporting you from your hotel to $airport Airport.\n\n"
-        "Could you kindly inform me if you'll be traveling with checked baggage or just carry-on items?\n\n"
-        "Tomorrow, upon your arrival, please keep me informed of each step: landing, clearing customs, and waiting for your luggage.\n\n"
-        "Should you have any inquiries, don't hesitate to ask.\n\n"
-        "Looking forward to seeing you in Paris! 😁";
+    if (_selectedValue == 'Paris') {
+      _messageController.text =
+          "Good day! I'll be your chauffeur tomorrow, transporting you from your hotel to $airport Airport.\n\n"
+          "Could you kindly inform me if you'll be traveling with checked baggage or just carry-on items?\n\n"
+          "Tomorrow, upon your arrival, please keep me informed of each step: landing, clearing customs, and waiting for your luggage.\n\n"
+          "Should you have any inquiries, don't hesitate to ask.\n\n"
+          "Looking forward to seeing you in Paris! 😁";
+    } else {
+      _messageController.text =
+          "Good day! I'll be your chauffeur tomorrow, transporting you from $airport Airport to your hotel.\n\n"
+          "Could you kindly inform me if you'll be traveling with checked baggage or just carry-on items?\n\n"
+          "Tomorrow, upon your arrival, please keep me informed of each step: landing, clearing customs, and waiting for your luggage.\n\n"
+          "Should you have any inquiries, don't hesitate to ask.\n\n"
+          "Looking forward to seeing you in Paris! 😁";
+    }
   }
 
   void _sendMessage() async {
