@@ -178,8 +178,6 @@ class DataFormPageState extends State<DataFormPage> {
     if (_selectedValue == 'Paris') {
       _messageController.text =
           "Good day! I'll be your chauffeur tomorrow, transporting you from your hotel to $airport Airport.\n\n"
-          "Could you kindly inform me if you'll be traveling with checked baggage or just carry-on items?\n\n"
-          "Tomorrow, upon your arrival, please keep me informed of each step: landing, clearing customs, and waiting for your luggage.\n\n"
           "Should you have any inquiries, don't hesitate to ask.\n\n"
           "Looking forward to seeing you in Paris! 😁";
     } else {
@@ -368,8 +366,16 @@ class DataFormPageState extends State<DataFormPage> {
                         const SizedBox(height: 20),
                         TextFormField(
                           decoration: const InputDecoration(
-                              labelText: 'Entrez le lien',
-                              border: OutlineInputBorder()),
+                            labelText: 'Entrez le lien',
+                            prefixIcon: Icon(Icons.link),
+                            border: OutlineInputBorder(
+                                borderRadius:
+                                    BorderRadius.all(Radius.circular(8))),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide:
+                                  BorderSide(color: Colors.blue, width: 2.0),
+                            ),
+                          ),
                           validator: (value) => value?.isEmpty ?? true
                               ? 'Veuillez entrer un lien'
                               : null,
@@ -378,8 +384,18 @@ class DataFormPageState extends State<DataFormPage> {
                         const SizedBox(height: 20),
                         Center(
                           child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.all(
+                                Radius.circular(8.0),
+                              )),
+                            ),
                             onPressed: _fetchPhoneNumber,
-                            child: const Text('Obtenir le numéro de téléphone'),
+                            child: const Text(
+                              'Obtenir le numéro de téléphone',
+                              style: TextStyle(color: Colors.white),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 50),
